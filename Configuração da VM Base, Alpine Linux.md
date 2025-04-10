@@ -211,28 +211,6 @@ No host, copie a chave pública para a VM:
 scp .ssh/id_rsa.pub root@192.168.1.108:/root/.ssh/authorized_keys
 ```
 
-### ⚠️ Atenção: Esse comando irá sobrescrever qualquer chave que já estiver no arquivo /root/.ssh/authorized_keys. Se você deseja preservar as chaves já existentes, utilize uma abordagem alternativa:
-
-No host, envie a sua chave como uma chave temporária:
-
-````bash
-scp .ssh\id_rsa.pub root@192.168.1.108:/root/.ssh/tempkey.pub
-````
-
-Na VM, utilize o codigo abaixo para adicionar a chave temporaria ao final das outras:
-
-````bash
-cat /root/.ssh/tempkey.pub >> /root/.ssh/authorized_keys
-````
-
-Depois remova a chave temporaria:
-
-````bash
-rm /root/.ssh/tempkey.pub
-````
-
----
-
 Ajuste as permissões:
 
 ```bash
@@ -251,9 +229,9 @@ ssh root@192.168.1.108
 
 Edite novamente o `sshd_config`:
 
-```
+````bash
 PasswordAuthentication no
-```
+````
 
 Reinicie o serviço SSH:
 

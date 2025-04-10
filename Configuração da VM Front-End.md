@@ -11,15 +11,75 @@ A configuração dessa VM base está documentada no **Arquivo de configuração 
 
 ---
 
-### 🏷️ 2. Alterando o Hostname
+### 🛠️ 2. Configurações Iniciais da VM Front-End
+
+Antes de passar para as configurações dessa VM vamos personalizar a identidade dela e garantir que ela esteja preparada para se comunicar corretamente com as outras.
+
+---
+
+#### 🏷️ Alterando o Hostname
 
 Para diferenciar a VM Front-End das demais, alteraremos seu hostname editando o arquivo:
 
-````bash
+```bash
 vi /etc/hostname
-````
+```
 
-> Mudaremos o nome de **localhost** para **frontend** (alterações no hostname são aplicadas após um reboot).
+> As alterações no hostname só têm efeito após um reboot:
+
+---
+
+#### 🔐 Definindo uma senha segura para o usuário root
+
+Se ainda **não definiu uma senha forte para o root** durante o setup da VM, faça-o:
+
+```bash
+passwd
+```
+
+> Crie uma senha segura e guarde-a. Considere uma senha com no mínimo 12 caracteres, incluindo letras maiúsculas, minúsculas, números e símbolos, já que viemos da VM-base, a senha antiga era root (nada seguro).
+
+---
+
+#### 📡 Configurando resolução de IPs no arquivo /etc/hosts
+
+Mesmo com o backend funcional, o Front-End pode falhar nas requisições caso o domínio `backend.llw` (no nosso caso utilizado para o front fazer requisições) não esteja sendo resolvido corretamente. Para resolver isso, edite o arquivo:
+
+```bash
+vi /etc/hosts
+```
+
+E adicione a resolução do ip corretamente:
+
+```
+"192.168.0.1" backend.llw
+```
+
+> O ip acima é apenas um exemplo, coloque o ip da sua vm back-end no lugar daquele, e saiba que sempre que nessa documentação for referida um ip com fim .llw significa que ele está resolvendo o ip de uma das VM's, Front, Back ou Database.
+
+> Priorize um **reboot** da maquina, após mudanças no arquivo de hosts, porque por mais que "não precise", outros serviços lerão o arquivo de hosts somente na hora do boot, e não vao atualizando sua leitura, por isso nomes podem não ser resolvidos corretamente.
+
+> Isso permite que a VM Front-End resolva o domínio `backend.llw` para o IP especificado, facilitando possíveis mudanças de IP no ambiente sem a necessidade de re-buildar o projeto.
+
+---
+
+#### 🖥️ Adicionando resolução no host (Windows)
+
+Mesmo com o front rodando na VM, o navegador que acessa o sistema está no host. Por isso, também é necessário configurar essa resolução no **Windows**:
+
+Edite o arquivo:
+
+```
+C:\Windows\System32\drivers\etc\hosts
+```
+
+E adicione a mesma linha:
+
+```
+192.168.1.106 backend.llw
+```
+
+> Lembre-se de abrir o editor de texto como **Administrador** para conseguir salvar as alterações nesse arquivo.
 
 ---
 
@@ -116,38 +176,132 @@ unzip site.zip
 
 ---
 
-### 📡 6. Configurando a resolução de IP's
+### 💾 6. Preparando o ambiente para o backup
 
-> Com o Front-End sendo exibido, ele não conseguirá fazer requisições pois não configuramos o back ainda, mas mesmo que o back estivesse configurado ele ainda não iria conseguir fazer requisições pois não está resolvendo corretamente os ip's que colocamos na build.
-
-Por isso agora dentro do arquivo em **/etc/hosts** adicione:
+Primeiramente vamos criar o arquivo onde ficará armazenado os backups:
 
 ````bash
-192.168.1.106 backend.llw
+mkdir /opt/backup/
 ````
 
-> Dessa forma, o endereço backend.llw será resolvido para o IP definido na linha, facilitando possiveis trocas de IP causadas por mudanças no ambiente de rede da VM, sem a necessidade de re-buildar o projeto a cada alteração de endereço.
+Tambem vamos criar as pastas para sub-categorizar os backups:
 
-Adicione a mesma linha no arquivo de **hosts** do host, da mesma forma, mas no caminho (no caso de Windows):
-
-````plaintext
-C:\Windows\System32\drivers\etc
+````bash
+mkdir /opt/backup/frontend/
+mkdir /opt/backup/backend/
+mkdir /opt/backup/database/
 ````
 
-> Isso é necessário porque, mesmo que o front esteja rodando na VM e resolva o IP corretamente internamente, o acesso ao front é feito pelo navegador do host — e o host não reconhece esse IP. Por isso, é preciso configurar essa resolução também no host.
+Após isso podemos criar o usuario backup_sys:
+
+````bash
+adduser -h /opt/backup/ backup_sys
+````
+
+> Definimos a home do user backup_sys como sendo /opt/backup/ porque é só la onde ele vai operar, recebendo os backups
+
+### 🔑 7. Recebendo as chaves rsa das outras VM's:
+
+Na VM **Back-End** e **Database** crie as chaves RSA (**caso não possuam**):
+
+````bash
+ssh-keygen -t rsa -b 4096
+````
+
+Agora em **uma** das VM's (Back-End **ou** Database) enviamos a chave com scp:
+
+````bash
+scp /root/.ssh/id_rsa.pub backup_sys@frontend.llw:/opt/backup/.ssh/authorized_keys
+````
+
+> Será necessario permitir conexões ssh por senha de novo (na VM Front) para permitir o envio das chaves, mas temporariamente, desative depois.
+
+Agora na **outra** VM, envie o arquivo tambem, mas dessa vez **não** use scp, e também envie ela como uma **chave temporária**:
+
+````bash
+scp /root/.ssh\id_rsa.pub backup_sys@frontend.llw:/opt/backup/.ssh/tempkey.pub
+````
+
+Na VM **Front-End**, utilize o codigo para adicionar a chave temporaria ao final da outra:
+
+````bash
+cat /opt/backup/.ssh/tempkey.pub >> /opt/backup/.ssh/authorized_keys
+````
+
+Depois remova a chave temporaria:
+
+````bash
+rm /opt/backup/.ssh/tempkey.pub
+````
+
+> Isso é necessario pois o comando scp, sobrescreve qualquer arquivo que já exista com o mesmo nome, então se mandassemos uma chave com o nome de authorized_keys, e depois mandassemos a outra da mesma forma, a segunda iria sobrescrever a primeira, dessa forma você enfileira uma atras da outra dentro do mesmo arquivo sem perder nenhuma.
+
+Para finalizar modifique as permissões da chave:
+
+````bash
+chmod 600 /opt/backup/.ssh/authorized_keys
+````
+
+E tambem mude o dono da pasta .ssh na home do user backup:
+
+````bash
+chown -R backup_sys:backup_sys /opt/backup/.ssh
+````
+
+> Isso é necessario porque, por mais que a pasta esteja na home do usuario backup, o root ainda é dono dela, assim essa chave só será valida, quando conexões a essa maquina forem pelo usuario backup_sys.
 
 ---
 
-### 💾 7. Primeiros passos para realizar o backup
+### 📜 8. Configurarando o script de backup local
 
->Criar user backup_sys
+Crie o arquivo de script em algum lugar seguro
 
->Receber as chaves das outras VM's
+````bash
+vi /root/backup_front
+````
+
+> Criamos na pasta root, não há nada de sensivel no backup do front, mas no dump do banco é necessario, ter a senha e user mysql, oque é importante proteger.
+
+Esse será nosso script:
+
+````bash
+#!/bin/sh
+
+timestamp=$(date '+%d%m%y%H%M%S')
+tempdir="/tmp/backup_front_$timestamp"
+backupdir="$tempdir/front"
+tarfile="/opt/backup/frontend/backup_front_$timestamp.tar.gz"
+
+echo "Criando diretórios temporários..."
+mkdir -p "$backupdir" || { echo "Erro ao criar diretório temporário"; exit 1; }
+
+echo "Copiando arquivos do frontend..."
+cp -r /opt/frontend/* "$backupdir/" || { echo "Erro ao copiar arquivos do frontend"; rm -rf "$tempdir"; exit 1; }
+
+echo "Copiando authorized_keys..."
+cp /root/.ssh/authorized_keys "$tempdir/" || { echo "Erro ao copiar authorized_keys"; rm -rf "$tempdir"; exit 1; }
+
+echo "Compactando tudo em: $tarfile"
+tar -czf "$tarfile" -C /tmp "backup_front_$timestamp" || { echo "Erro ao compactar"; rm -rf "$tempdir"; exit 1; }
+
+echo "-> Backup criado com sucesso!"
+
+rm -rf "$tempdir"
+exit 0
+````
+
+Torne-o executavel com o comando:
+
+````bash
+chmod +x /root/backup_front
+````
+
+> Agora já será possivel chamar o script manualmente, **/root/backup_front**.
 
 ---
 
-### 📜 8. Configurar o script de backup local
+## 🕝 9. Configurando o agendamento do script de backup local
 
->Script de backup local
+>Agendamento...
 
 ---

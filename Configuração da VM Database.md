@@ -92,10 +92,12 @@ Agora criaremos o user mysql que será utilizado pela API para acessar a databas
 
 ````sql
 CREATE USER 'llw'@'backend.llw' IDENTIFIED BY 'PePeFaFe!05';
-GRANT SELECT,INSERT,UPDATE ON adv.* TO 'llw'@'backend.llw';
+GRANT SELECT,INSERT,UPDATE,DELETE ON adv.* TO 'llw'@'backend.llw';
 ````
 
-> Esse usuário só terá permissão para operar na database que será utilizada pela API, e só podera fazer comandos SQL limitados.
+> Caso seja a primeira execução do back, e o banco estiver vazio, pode ser necessario dar permissões de **CREATE**, mas lembre-se de remove-las depois com **REVOKE**.
+
+> No fim esse usuário só terá permissão para operar na database que será utilizada pela API, e só podera fazer comandos SQL limitados, nada que altere as estruturas das tabelas.
 
 ---
 
