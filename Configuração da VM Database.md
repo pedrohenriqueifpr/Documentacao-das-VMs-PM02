@@ -51,7 +51,7 @@ Modifique o conjunto de configuração do mysql:
 [mysqld]
 #skip-networking
 
-bind-address=0.0.0.0
+bind-address=database.llw
 port=3306
 ````
 
@@ -78,7 +78,6 @@ Adicionaremos uma senha forte ao user root, por questões de segurança e requis
 
 ````sql
 ALTER USER 'root'@'localhost' IDENTIFIED BY 'PePeFaFe!05';
-FLUSH PRIVILEGES;
 ````
 
 > A senha do root será a mesma do user advocacia por questões de facilitar a implementação, mas deveriam ser distintas.
@@ -92,12 +91,11 @@ create database adv;
 Agora criaremos o user mysql que será utilizado pela API para acessar a database:
 
 ````sql
-CREATE USER 'advocacia'@'%' IDENTIFIED BY 'PePeFaFe!05';
-GRANT ALL PRIVILEGES ON adv.* TO 'advocacia'@'%';
-FLUSH PRIVILEGES;
+CREATE USER 'llw'@'backend.llw' IDENTIFIED BY 'PePeFaFe!05';
+GRANT SELECT,INSERT,UPDATE ON adv.* TO 'llw'@'backend.llw';
 ````
 
-> Esse usuário só terá permissão para operar na database que será utilizada pela API.
+> Esse usuário só terá permissão para operar na database que será utilizada pela API, e só podera fazer comandos SQL limitados.
 
 ---
 
