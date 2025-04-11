@@ -19,7 +19,7 @@ Antes de passar para as configurações dessa VM vamos personalizar a identidade
 
 #### 🏷️ Alterando o Hostname
 
-Para diferenciar a VM Front-End das demais, alteraremos seu hostname editando o arquivo:
+Para diferenciar a VM Front-End das demais, alteraremos seu hostname para **frontend**, editando o arquivo:
 
 ```bash
 vi /etc/hostname
@@ -200,7 +200,7 @@ adduser -h /opt/backup/ backup_sys
 
 > Definimos a home do user backup_sys como sendo /opt/backup/ porque é só la onde ele vai operar, recebendo os backups
 
-### 🔑 7. Recebendo as chaves rsa das outras VM's:
+### 🔑 7. Recebendo as chaves RSA das outras VM's:
 
 Na VM **Back-End** e **Database** crie as chaves RSA (**caso não possuam**):
 
@@ -260,33 +260,44 @@ Crie o arquivo de script em algum lugar seguro
 vi /root/backup_front
 ````
 
-> Criamos na pasta root, não há nada de sensivel no backup do front, mas no dump do banco é necessario, ter a senha e user mysql, oque é importante proteger.
+> Criamos na pasta root, não há nada de sensivel no backup do front, mas no dump do banco é necessario ter a senha e user mysql, oque é importante proteger.
 
 Esse será nosso script:
 
 ````bash
 #!/bin/sh
 
-timestamp=$(date '+%d%m%y%H%M%S')
-tempdir="/tmp/backup_front_$timestamp"
-backupdir="$tempdir/front"
-tarfile="/opt/backup/frontend/backup_front_$timestamp.tar.gz"
+#Timestamp para identificar horario dos backups
+timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
 
-echo "Criando diretórios temporários..."
-mkdir -p "$backupdir" || { echo "Erro ao criar diretório temporário"; exit 1; }
+#Arquivo temporario, para organizar tudo
+temp_dir="/tmp/backup_front_$timestamp"
 
-echo "Copiando arquivos do frontend..."
-cp -r /opt/frontend/* "$backupdir/" || { echo "Erro ao copiar arquivos do frontend"; rm -rf "$tempdir"; exit 1; }
+#Arquivo para os itens do front ficarem dentro
+front_dir="$temp_dir/front"
 
-echo "Copiando authorized_keys..."
-cp /root/.ssh/authorized_keys "$tempdir/" || { echo "Erro ao copiar authorized_keys"; rm -rf "$tempdir"; exit 1; }
+#Localização dos arquivos alvo do backup
+front_end="/opt/frontend"
+authorized_keys="/root/.ssh/authorized_keys"
 
-echo "Compactando tudo em: $tarfile"
-tar -czf "$tarfile" -C /tmp "backup_front_$timestamp" || { echo "Erro ao compactar"; rm -rf "$tempdir"; exit 1; }
+#Local e nome do arquivo compactado tar gz
+tar_file="/opt/backup/frontend/backup_front_$timestamp.tar.gz"
 
-echo "-> Backup criado com sucesso!"
+echo "Criando diretórios temporários, Data: $timestamp"
+mkdir -p "$front_dir" || { echo "Erro ao criar diretório temporário, Data: $timestamp"; exit 1; }
 
-rm -rf "$tempdir"
+echo "Copiando arquivos do frontend, Data: $timestamp"
+cp -r "$front_end/"* "$front_dir/" || { echo "Erro ao copiar arquivos do frontend, Data: $timestamp"; rm -rf "$temp_dir"; exit 1; }
+
+echo "Copiando authorized_keys, Data: $timestamp"
+cp "$authorized_keys" "$temp_dir/" || { echo "Erro ao copiar authorized_keys, Data: $timestamp"; rm -rf "$temp_dir"; exit 1; }
+
+echo "Compactando tudo, Data: $timestamp"
+tar -czf "$tar_file" -C "$(dirname "$temp_dir")" "$(basename "$temp_dir")" || { echo "Erro ao compactar, Data: $timestamp"; rm -rf "$temp_dir"; exit 1; }
+
+echo "-> Backup criado com sucesso, Data: $timestamp "
+
+rm -rf "$temp_dir"
 exit 0
 ````
 
@@ -300,8 +311,20 @@ chmod +x /root/backup_front
 
 ---
 
-## 🕝 9. Configurando o agendamento do script de backup local
+## 🕝 9. Agendamento de Script Backup com Crontab
 
->Agendamento...
+Edite o arquivo de agendamento padrão do Linux Alpine com o codigo:
+
+````bash
+crontab -e
+````
+
+Dentro do arquivo adicione essa linha ao final:
+
+````bash
+0 */3 * * * /root/backup_front 1>> /var/log/backup_front.log 2>> /var/log/backup_front_error.log
+````
+
+> Essa linha garantirá que o script será executado no **minuto 0** a cada **3 horas**, e também redireciona a saida padrão **stdout 1>>** para um arquivo de log, e a saida de erros **stderr 2>>** para um arquivo de log separado, apenas para erros.
 
 ---

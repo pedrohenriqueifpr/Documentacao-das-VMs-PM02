@@ -11,15 +11,55 @@ A configuração dessa VM base está documentada no **Arquivo de configuração 
 
 ---
 
-### 🏷️ 2. Alterando o Hostname
+### 🛠️ 2. Configurações Iniciais da VM Back-End
 
-Para diferenciar a VM Back-End das demais, alteraremos seu hostname editando o arquivo:
+Antes de passar para as configurações dessa VM vamos personalizar a identidade dela e garantir que ela esteja preparada para se comunicar corretamente com as outras.
 
-````bash
+---
+
+#### 🏷️ Alterando o Hostname
+
+Para diferenciar a VM Back-End das demais, alteraremos seu hostname para **backend**, editando o arquivo:
+
+```bash
 vi /etc/hostname
-````
+```
 
-> Mudaremos o nome de **localhost** para **backend** (alterações no hostname são aplicadas após um reboot).
+> As alterações no hostname só têm efeito após um reboot:
+
+---
+
+#### 🔐 Definindo uma senha segura para o usuário root
+
+Se ainda **não definiu uma senha forte para o root** durante o setup da VM, faça-o:
+
+```bash
+passwd
+```
+
+> Crie uma senha segura e guarde-a. Considere uma senha com no mínimo 12 caracteres, incluindo letras maiúsculas, minúsculas, números e símbolos, já que viemos da VM-base, a senha antiga era root (nada seguro).
+
+---
+
+#### 📡 Configurando resolução de IPs no arquivo /etc/hosts
+
+Para que o back-end possa fazer a conexão com o endereço correto ajuste a resolução de ip de hosts, por isso, edite o arquivo:
+
+```bash
+vi /etc/hosts
+```
+
+E adicione a resolução do ip corretamente:
+
+```
+"192.168.0.1" database.llw
+```
+
+> O ip acima é apenas um exemplo, coloque o ip da sua VM Database no lugar daquele, e saiba que sempre que nessa documentação for referida um ip com fim .llw significa que ele está resolvendo o ip de uma das VM's, Front, Back ou Database.
+
+> Priorize um **reboot** da maquina, após mudanças no arquivo de hosts, porque por mais que "não precise", outros serviços lerão o arquivo de hosts somente na hora do boot, e não vao atualizando sua leitura, por isso nomes podem não ser resolvidos corretamente.
+
+> Isso permite que a VM Back-End resolva o domínio `database.llw` para o IP especificado, facilitando possíveis mudanças de IP no ambiente sem a necessidade de re-buildar o projeto.
 
 ---
 
@@ -148,14 +188,84 @@ rc-update add backend boot
 
 > Agora toda vez que iniciarmos essa VM, a API vai ser iniciada pelo user backend.
 
-### 💾 6. Primeiros passos para realizar o backup
+### 📜 6. Configurarando o script de backup
 
->Criar chaves e enviar para VM Front
+Crie o arquivo de script em algum lugar seguro
+
+````bash
+vi /root/backup_backend
+````
+
+> Criamos na pasta root, não há nada de sensivel no backup do back, mas no dump do banco é necessario ter a senha e user mysql, oque é importante proteger.
+
+Esse será nosso script:
+
+````bash
+#!/bin/sh
+
+#Timestamp para identificar horario dos backups
+timestamp=$(date '+%Y-%m-%d_%H-%M-%S')
+
+#Arquivo temporario, para organizar tudo
+temp_dir="/tmp/backup_backend_$timestamp"
+
+#Localização dos arquivos alvo do backup
+init_script="/etc/init.d/backend"
+authorized_keys="/root/.ssh/authorized_keys"
+
+#Local e nome do arquivo compactado tar gz
+tar_file="/tmp/backup_backend_$timestamp.tar.gz"
+
+# Caminhos de destino
+remote_user="backup_sys"
+remote_host="frontend.llw"
+remote_path="/opt/backup/backend"
+
+echo "Criando diretórios temporários, Data: $timestamp"
+mkdir -p "$temp_dir" || { echo "Erro ao criar diretório temporário, Data: $timestamp"; exit 1; }
+
+echo "Copiando script de inicialização, Data: $timestamp"
+cp "$init_script" "$temp_dir/" || { echo "Erro ao copiar o script backend, Data: $timestamp"; rm -rf "$temp_dir"; exit 1; }
+
+echo "Copiando authorized_keys, Data: $timestamp"
+cp "$authorized_keys" "$temp_dir/" || { echo "Erro ao copiar authorized_keys, Data: $timestamp"; rm -rf "$temp_dir"; exit 1; }
+
+echo "Compactando arquivos, Data: $timestamp"
+tar -czf "$tar_file" -C "$(dirname "$temp_dir")" "$(basename "$temp_dir")" || { echo "Erro ao compactar, Data: $timestamp"; rm -rf "$temp_dir"; exit 1; }
+
+echo "Enviando backup para $remote_host:$remote_path, Data: $timestamp"
+scp "$tar_file" "$remote_user@$remote_host:$remote_path/" || { echo "Erro ao enviar o backup via SCP, Data: $timestamp"; rm -rf "$temp_dir" "$tar_file"; exit 1; }
+
+echo "-> Backup enviado com sucesso, Data: $timestamp"
+
+rm -rf "$temp_dir" "$tar_file"
+exit 0
+````
+
+Torne-o executavel com o comando:
+
+````bash
+chmod +x /root/backup_backend
+````
+
+> Agora já será possivel chamar o script manualmente, **/root/backup_backend**.
 
 ---
 
-### 📜 7. Configurar o script de backup
+## 🕝 7. Agendamento de Script Backup com Crontab
 
->Script de backup 
+Edite o arquivo de agendamento do service padrão do Linux Alpine com o codigo:
+
+````bash
+crontab -e
+````
+
+Dentro do arquivo adicione essa linha ao final:
+
+````bash
+0 */3 * * * /root/backup_backend 1>> /var/log/backup_backend.log 2>> /var/log/backup_backend_error.log
+````
+
+> Essa linha garantirá que o script será executado no **minuto 0** a cada **3 horas**, e também redireciona a saida padrão **stdout 1>>** para um arquivo de log, e a saida de erros **stderr 2>>** para um arquivo de log separado, apenas para erros.
 
 ---
