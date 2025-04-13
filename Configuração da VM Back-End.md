@@ -269,3 +269,60 @@ Dentro do arquivo adicione essa linha ao final:
 > Essa linha garantirá que o script será executado no **minuto 0** a cada **3 horas**, e também redireciona a saida padrão **stdout 1>>** para um arquivo de log, e a saida de erros **stderr 2>>** para um arquivo de log separado, apenas para erros.
 
 ---
+
+## Medidas finais de segurança
+
+Começaremos reforçando as medidas para as conexões ssh:
+
+````bash
+PermitRootLogin no
+PasswordAuthentication no
+````
+
+> Garantimos que não será possivel conectar-se ao root, nem conectar utilizando senha, apenas chaves RSA.
+
+### Firewall
+
+Utilizamos iptables, para bloquear todos o acesso as portas inutilizadas
+
+````bash
+apk add iptables
+````
+
+Adicionamos as seguintes regras de trafico:
+
+````bash
+iptables -P INPUT DROP
+````
+>Bloqueia qualquer conexão de entrada (menos as **excessões**).
+
+````bash
+iptables -P OUTPUT ACCEPT
+````
+> Permite que a VM envie dados para fora, importante para podermos acessar serviços externos como a **internet**.
+
+````bash
+iptables -P FORWARD DROP
+````
+>Bloqueia a VM de "atuar como roteador", bloqueando o encaminhamento de pacotes entre interfaces de rede. É "opcional" nessa ocasião mas é uma boa pratica, já que essa VM apenas recebe conexões e não encaminha dados para nenhum outro dispositivo, e como isso não deveria acontecer mesmo podemos bloquear se ocorrer.
+
+Agora para as excessões
+
+````bash
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+````
+>Essa é crucial. Ela permite respostas a conexões que já foram estabelecidas, se não a VM só enviaria as requisições mas barraria a resposta, Para a vm Back-End é importante para ela se conectar e receber a resposta do Banco de Dados.
+
+
+````bash
+iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+````
+>Essa vai liberar a porta 8080 que será utilizada para receber requisições da VM Front-End.
+
+
+````bash
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+````
+>Essa vai liberar a porta 22 utilizada em nossas VM para conexão SSH, mas a VM Back-End não recebe mais conexão ssh no nosso cenário entao é **opcional**.
+
+---
